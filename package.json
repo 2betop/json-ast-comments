@@ -1,0 +1,33 @@
+{
+  "name": "json-ast-comments",
+  "version": "1.0.0",
+  "description": "parser json string (with comments) into json, stringify json to string(with comments)",
+  "main": "lib/index.js",
+  "types": "lib/index.d.ts",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "jison": "jison src/json.jison -o src/json.js",
+    "build": "tsc"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/2betop/json-ast-comments.git"
+  },
+  "keywords": [
+    "json",
+    "ast",
+    "comments",
+    "parser",
+    "stringify"
+  ],
+  "author": "2betop",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/2betop/json-ast-comments/issues"
+  },
+  "homepage": "https://github.com/2betop/json-ast-comments#readme",
+  "devDependencies": {
+    "jison": "^0.4.18",
+    "typescript": "^4.0.2"
+  }
+}
