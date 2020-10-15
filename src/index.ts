@@ -1,30 +1,40 @@
 // @ts-ignore
 import parser = require("./json");
 
+export interface JSONRange {
+  start: { line: number; column: number };
+  end: { line: number; column: number };
+}
+
 export interface JsonString {
   type: "string";
   value: string;
+  range: JSONRange;
 }
 
 export interface JsonNull {
   type: "null";
   value: null;
+  range: JSONRange;
 }
 
 export interface JsonBoolean {
   type: "boolean";
   value: boolean;
+  range: JSONRange;
 }
 
 export interface JsonNumber {
   type: "number";
   value: number;
   raw: string;
+  range: JSONRange;
 }
 
 export interface JsonArray {
   type: "array";
   members: Array<JsonComment | JsonValue>;
+  range: JSONRange;
 }
 
 export type JsonValue =
@@ -39,21 +49,25 @@ export interface JsonProperty {
   type: "property";
   key: Array<JsonString | JsonComment>;
   value: Array<JsonValue | JsonComment>;
+  range: JSONRange;
 }
 
 export interface JsonObject {
   type: "object";
   members: Array<JsonProperty | JsonComment>;
+  range: JSONRange;
 }
 
 export interface JsonComment {
   type: "comment";
   value: string;
+  range: JSONRange;
 }
 
 export interface JsonDocument {
   type: "document";
   body: Array<JsonObject | JsonComment>;
+  range: JSONRange;
 }
 
 export type JsonAst = JsonValue | JsonComment | JsonDocument;
@@ -104,16 +118,38 @@ function parseArray(ast: JsonArray, commentsHost?: any) {
   let arr: Array<any> = [];
   let leadingComments: Array<string> = [];
 
-  ast.members.forEach((member) => {
+  ast.members.forEach((member, index) => {
+    let prevMemeber = null;
+    let i = index - 1;
+    while (i >= 0) {
+      prevMemeber = ast.members[i];
+
+      if (prevMemeber.type !== "comment") {
+        break;
+      }
+      i--;
+    }
+
     if (member.type !== "comment") {
       if (commentsHost) {
-        commentsHost[arr.length] = leadingComments;
+        commentsHost[arr.length] = [
+          leadingComments.length ? leadingComments : 0,
+        ];
       }
 
       arr.push(parseNode(member));
       leadingComments = [];
     } else {
-      leadingComments.push(parseNode(member));
+      if (
+        commentsHost &&
+        prevMemeber?.type !== "comment" &&
+        prevMemeber?.range.end.line === member.range.start.line
+      ) {
+        commentsHost[arr.length - 1][1] = commentsHost[arr.length - 1][1] || [];
+        commentsHost[arr.length - 1][1].push(parseNode(member));
+      } else {
+        leadingComments.push(parseNode(member));
+      }
     }
   });
 
@@ -129,14 +165,24 @@ function parseObject(ast: JsonObject) {
     $$comments?: JsonCommentsObject;
     [propName: string]: any;
   } = {};
+  obj.$$comments = obj.$$comments || {};
 
   const outTrailingComments: Array<string> = [];
 
-  ast.members.forEach((member) => {
+  ast.members.forEach((member, index) => {
     if (member.type === "comment") {
       outTrailingComments.push(parseNode(member));
       return;
     }
+
+    const prevMemeber = index > 0 ? ast.members[index - 1] : null;
+    const prevKeyNode = (prevMemeber as JsonProperty)?.key.filter(
+      (member) => member.type !== "comment"
+    )[0];
+    const prevKey = prevKeyNode ? parseNode(prevKeyNode) : "";
+    const prevValueNode = (prevMemeber as JsonProperty)?.value.filter(
+      (member) => member.type !== "comment"
+    )[0];
 
     let leadingComments: Array<string> = [];
     let leftComments: Array<string> = [];
@@ -151,7 +197,15 @@ function parseObject(ast: JsonObject) {
       } else if (keyNode) {
         leftComments.push(parseNode(member));
       } else {
-        leadingComments.push(parseNode(member));
+        if (
+          prevValueNode &&
+          member?.range.start.line === prevValueNode?.range.end.line
+        ) {
+          obj.$$comments![prevKey][4] = obj.$$comments![prevKey][4] || [];
+          obj.$$comments![prevKey][4].push(parseNode(member));
+        } else {
+          leadingComments.push(parseNode(member));
+        }
       }
     });
 
@@ -166,20 +220,18 @@ function parseObject(ast: JsonObject) {
     });
     const key = parseNode(keyNode!);
 
-    obj.$$comments = obj.$$comments || {};
-
     if (valueNode!?.type === "array") {
-      obj.$$comments[`$${key}`] = {};
-      obj[key] = parseNode(valueNode!, obj.$$comments[`$${key}`]);
+      obj.$$comments![`$${key}`] = {};
+      obj[key] = parseNode(valueNode!, obj.$$comments![`$${key}`]);
     } else {
       obj[key] = parseNode(valueNode!);
     }
 
-    obj.$$comments[key] = [
-      leadingComments,
-      leftComments,
-      rightComments,
-      trailingComments,
+    obj.$$comments![key] = [
+      leadingComments.length ? leadingComments : 0,
+      leftComments.length ? leftComments : 0,
+      rightComments.length ? rightComments : 0,
+      trailingComments.length ? trailingComments : 0,
     ];
   });
 
@@ -187,6 +239,8 @@ function parseObject(ast: JsonObject) {
     obj.$$comments = obj.$$comments || {};
     obj.$$comments.$$ = outTrailingComments;
   }
+
+  clearup(obj);
 
   return obj;
 }
@@ -243,13 +297,68 @@ function whitespace(len: number) {
   return ret;
 }
 
+function clearup(obj: any) {
+  if (!obj.$$comments) {
+    return;
+  }
+
+  Object.keys(obj.$$comments).forEach((key) => {
+    const value = obj.$$comments[key];
+
+    if (key[0] === "$" && isPlainObject(value)) {
+      const keys = Object.keys(value);
+      if (keys.length) {
+        keys.forEach((childKey) => {
+          if (childKey !== "$$") {
+            const child = value[childKey];
+
+            let len = child.length;
+            while (len-- > 0) {
+              if (!child[len]) {
+                child.splice(len, 1);
+              } else {
+                break;
+              }
+            }
+
+            if (!child.length) {
+              delete value[childKey];
+            }
+          }
+        });
+      }
+      if (!Object.keys(value).length) {
+        delete obj.$$comments[key];
+      }
+    } else if (Array.isArray(value)) {
+      let len = value.length;
+
+      while (len-- > 0) {
+        if (!value[len]) {
+          value.splice(len, 1);
+        } else {
+          break;
+        }
+      }
+
+      if (!value.length) {
+        delete obj.$$comments[key];
+      }
+    }
+  });
+
+  if (!Object.keys(obj.$$comments).length) {
+    delete obj.$$comments;
+  }
+}
+
 function stringifyNode(
   rootNode: any,
   indent: number = 0,
   hostComments?: any
 ): any {
   if (isPlainObject(rootNode)) {
-    const comments = rootNode.$$comments;
+    const commentsObj = rootNode.$$comments;
 
     const keys = Object.keys(rootNode);
     const idx = keys.indexOf("$$comments");
@@ -261,20 +370,22 @@ function stringifyNode(
     let lines: Array<string> = ["{"];
 
     keys.forEach((key: string, index) => {
-      const hasComments = !!comments?.[key];
+      const comment = commentsObj?.[key];
       const value = rootNode[key];
       let prefix = "";
-      let rest = "";
+      let middle = "";
+      let affix = "";
 
-      if (hasComments) {
-        prefix = `${comments[key][0].join("")}"${key}"`;
-        rest = `${comments[key][1].join("")}:${comments[key][2].join(
-          ""
-        )}${stringifyNode(
-          value,
-          indent + tabSize,
-          comments?.[`$${key}`]
-        )}${comments[key][3].join("")}${len - 1 === index ? "" : ","}`;
+      if (comment) {
+        prefix = `${comment[0] ? comment[0].join("") : ""}"${key}"`;
+        middle = `${comment[1] ? comment[1].join("") : ""}:${
+          comment[2] ? comment[2].join("") : " "
+        }${stringifyNode(value, indent + tabSize, commentsObj?.[`$${key}`])}`;
+        affix = `${
+          comment[3] ? comment[3].join("") : ""
+        }${len - 1 === index ? "" : ","}${
+          comment[4] ? comment[4].join("") : ""
+        }`;
 
         // fix indent
         prefix = prefix
@@ -282,24 +393,35 @@ function stringifyNode(
           .replace(
             /(\n|^) *?([^\s])/g,
             (_, lb, firstword) =>
-              `${lb}${whitespace(indent + tabSize)}${firstword}`
+              `${lb}${whitespace(indent + tabSize)}${
+                firstword === "*" ? " *" : firstword
+              }`
           );
 
-        rest = rest.replace(/\n$/, "");
+        middle = middle.replace(/\n$/, "");
+
+        affix = affix
+          .replace(
+            /(\n|^) *?([^\s])/g,
+            (_, lb, firstword) =>
+              `${lb}${whitespace(indent + tabSize)}${
+                firstword === "*" ? " *" : firstword
+              }`
+          );
       } else {
         prefix = `${whitespace(indent + tabSize)}"${key}"`;
-        rest = `: ${stringifyNode(
+        middle = `: ${stringifyNode(
           value,
           indent + tabSize,
-          comments?.[`$${key}`]
+          commentsObj?.[`$${key}`]
         )}${len - 1 === index ? "" : ","}`;
       }
 
-      lines.push(prefix + rest);
+      lines.push(prefix + middle + affix);
     });
 
-    if (Array.isArray(comments?.$$)) {
-      lines.push(comments.$$.join("").replace(/^\n|\n$/g, ""));
+    if (Array.isArray(commentsObj?.$$)) {
+      lines.push(commentsObj.$$.join("").replace(/^\n|\n$/g, ""));
     }
 
     lines.push(whitespace(indent) + "}");
@@ -309,14 +431,15 @@ function stringifyNode(
     const len = rootNode.length;
 
     rootNode.forEach((child, index) => {
-      if (Array.isArray(hostComments?.[index])) {
-        let prefix =
-          hostComments[index].join("").replace(/^\n/, "") +
-          whitespace(indent + tabSize);
+      const comments = hostComments?.[index];
+      if (Array.isArray(comments)) {
+        let prefix = `${
+          comments[0] ? comments[0].join("").replace(/^\n/, "") : ""
+        }`;
 
-        const rest =
-          stringifyNode(child, indent + tabSize) +
-          (len - 1 === index ? "" : ",");
+        const rest = `${stringifyNode(child, indent + tabSize)}${
+          len - 1 === index ? "" : ","
+        }${comments[1] ? comments[1].join("") : ""}`;
 
         // fix indent
         prefix = (prefix + rest.substring(0, 1))
@@ -324,7 +447,9 @@ function stringifyNode(
           .replace(
             /(\n|^) *?([^\s])/g,
             (_, lb, firstword) =>
-              `${lb}${whitespace(indent + tabSize)}${firstword}`
+              `${lb}${whitespace(indent + tabSize)}${
+                firstword === "*" ? " *" : firstword
+              }`
           );
 
         lines.push(prefix + rest.substring(1));
@@ -344,7 +469,9 @@ function stringifyNode(
           .replace(
             /(\n|^) *?([^\s])/g,
             (_: string, lb: string, firstword: string) =>
-              `${lb}${whitespace(indent + tabSize)}${firstword}`
+              `${lb}${whitespace(indent + tabSize)}${
+                firstword === "*" ? " *" : firstword
+              }`
           )
       );
     }

@@ -8,5 +8,5 @@
     "removeComments": true,
     "allowJs": true
   },
-  "include": ["src/**/*"]
+  "include": ["src/*.ts"]
 }

@@ -4,7 +4,7 @@
  */
 /* eslint-disable */
 function replaceEscape(text, wrap) {
-    let reg = wrap === '`' 
+    var reg = wrap === '`' 
         ? /\\([\\bfnrtv`\$])/g : wrap === '"'
         ? /\\([\"\\bfnrtv])/g 
         : /\\([\'\\bfnrtv])/g;
@@ -18,6 +18,19 @@ function replaceEscape(text, wrap) {
             ? '\t' : text === 'v' 
             ? '\v' : text
     });
+}
+
+function getLoc(line, yytext) {
+  return {
+    start: {
+      // column: 0,
+      line: line - yytext.replace(/^\s+/, '').split(/(?:\r\n|\n|\r)/).length + 1,
+    },
+    end: {
+      // column: 0,
+      line: line
+    }
+  };
 }
 %}
 
@@ -59,8 +72,8 @@ stringliteral (\'{stringsingle}*\')|(\"{stringdouble}*\")
 ";"      return ';'
 ","      return ','
 
-\s*\/\/.*\s*                                return 'COMMENTS'
-\s*[/][*][^*]*[*]+([^/*][^*]*[*]+)*[/]\s*   return 'COMMENTS'
+\s*\/\/.*\s*                                 return 'COMMENTS'
+\s*[/][*][^*]*[*]+([^/*][^*]*[*]+)*[/]\s*    return 'COMMENTS'
 
 <<EOF>>  return 'EOF'
 .        return 'INVALID'
@@ -79,38 +92,38 @@ stringliteral (\'{stringsingle}*\')|(\"{stringdouble}*\")
 
 json_document
     : json_document_body EOF
-      { return {type: 'document', body: $1}; }
+      { return {type: 'document', body: $1, range: getLoc(yylineno, yytext)}; }
     ;
 
 json_null_literal
     : NULLTOKEN
-      { $$ = {type: 'null', value: null}; }
+      { $$ = {type: 'null', value: null, range: getLoc(yylineno, yytext)}; }
     ;
 
 json_boolean_literal
   : TRUETOKEN
-    { $$ = {type: 'boolean', value: true}; }
+    { $$ = {type: 'boolean', value: true, range: getLoc(yylineno, yytext)}; }
   | FALSETOKEN
-    { $$ = {type: 'boolean', value: false}; }
+    { $$ = {type: 'boolean', value: false, range: getLoc(yylineno, yytext)}; }
   ;
 
 json_string
   : STRING_LITERAL
-    {$$ = {type: 'string', value: replaceEscape($1.substring(1, $1.length - 1), $1.substring(0, 1))};}
+    {$$ = {type: 'string', value: replaceEscape($1.substring(1, $1.length - 1), $1.substring(0, 1)), range: getLoc(yylineno, yytext)};}
   ;
 
 json_number
   : NUMBER_LITERAL
-    {$$ = {type: 'number', value: /\./.test($1) ? parseFloat($1) : parseInt($1, 10), raw: $1};}
+    {$$ = {type: 'number', value: /\./.test($1) ? parseFloat($1) : parseInt($1, 10), raw: $1, range: getLoc(yylineno, yytext)};}
   ;
 
 json_object
   : '{' '}'
-    {$$ = {type: 'object', members: []};}
+    {$$ = {type: 'object', members: [], range: getLoc(yylineno, yytext)};}
   | '{' json_comments '}'
-    {$$ = {type: 'object', members: $2};}
+    {$$ = {type: 'object', members: $2, range: getLoc(yylineno, yytext)};}
   | '{' json_member_list '}'
-    {$$ = {type: 'object', members: $2};}
+    {$$ = {type: 'object', members: $2, range: getLoc(yylineno, yytext)};}
   ;
 
 json_member_list
@@ -122,22 +135,22 @@ json_member_list
 
 json_member
   : json_string ':' json_with_comments_value
-    {$$ = {type: 'property', key: [$1], value: $3};}
+    {$$ = {type: 'property', key: [$1], value: $3, range: getLoc(yylineno, yytext)}; }
   | json_comments json_string ':' json_with_comments_value
-    {$$ = {type: 'property', key: $1.concat($2), value: $4};}
+    {$$ = {type: 'property', key: $1.concat($2), value: $4, range: getLoc(yylineno, yytext)};}
   | json_string json_comments ':' json_with_comments_value
-    {$$ = {type: 'property', key: [$1].concat($2), value: $4};}
+    {$$ = {type: 'property', key: [$1].concat($2), value: $4, range: getLoc(yylineno, yytext)};}
   | json_comments json_string json_comments ':' json_with_comments_value
-    {$$ = {type: 'property', key: $1.concat($2).concat($3), value: $5};}
+    {$$ = {type: 'property', key: $1.concat($2).concat($3), value: $5, range: getLoc(yylineno, yytext)};}
   ;
 
 json_array
   : '[' ']'
-    {$$ = {type: 'array', members: []};}
+    {$$ = {type: 'array', members: [], range: getLoc(yylineno, yytext)};}
   | '[' json_element_list ']'
-    {$$ = {type: 'array', members: $2};}
+    {$$ = {type: 'array', members: $2, range: getLoc(yylineno, yytext)};}
   | '[' json_comments ']'
-    {$$ = {type: 'array', members: $2};}
+    {$$ = {type: 'array', members: $2, range: getLoc(yylineno, yytext)};}
   ;
 
 json_element_list
@@ -158,7 +171,7 @@ json_value
 
 json_comment
   : COMMENTS
-    {$$ = {type: 'comment', value: $1}}
+    {$$ = {type: 'comment', value: $1, range: getLoc(yylineno, yytext)};}
   ;
 
 json_comments
