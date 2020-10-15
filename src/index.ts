@@ -381,11 +381,13 @@ function stringifyNode(
         middle = `${comment[1] ? comment[1].join("") : ""}:${
           comment[2] ? comment[2].join("") : " "
         }${stringifyNode(value, indent + tabSize, commentsObj?.[`$${key}`])}`;
-        affix = `${
-          comment[3] ? comment[3].join("") : ""
-        }${len - 1 === index ? "" : ","}${
-          comment[4] ? comment[4].join("") : ""
-        }`;
+        affix = `${comment[3] ? comment[3].join("") : ""}${
+          len - 1 === index ? "" : ","
+        }${comment[4] ? comment[4].join("") : ""}`;
+
+        const paths = affix.split(/\n/);
+        middle += paths.shift();
+        affix = paths.length ? "\n" + paths.join("\n") : "";
 
         // fix indent
         prefix = prefix
@@ -407,7 +409,8 @@ function stringifyNode(
               `${lb}${whitespace(indent + tabSize)}${
                 firstword === "*" ? " *" : firstword
               }`
-          );
+          )
+          .replace(/\n$/, "");
       } else {
         prefix = `${whitespace(indent + tabSize)}"${key}"`;
         middle = `: ${stringifyNode(
@@ -421,7 +424,17 @@ function stringifyNode(
     });
 
     if (Array.isArray(commentsObj?.$$)) {
-      lines.push(commentsObj.$$.join("").replace(/^\n|\n$/g, ""));
+      let comments = `${commentsObj.$$.join("")}`
+        .replace(/^\n|\n$/g, "")
+        .replace(
+          /(\n|^) *?([^\s])/g,
+          (_, lb, firstword) =>
+            `${lb}${whitespace(indent + tabSize)}${
+              firstword === "*" ? " *" : firstword
+            }`
+        );
+
+      lines.push(comments);
     }
 
     lines.push(whitespace(indent) + "}");
