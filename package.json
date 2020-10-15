@@ -1,6 +1,6 @@
 {
   "name": "json-ast-comments",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "parser json string (with comments) into json, stringify json to string(with comments)",
   "main": "lib/index.js",
   "types": "lib/index.d.ts",
