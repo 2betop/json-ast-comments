@@ -374,20 +374,16 @@ function stringifyNode(
       const value = rootNode[key];
       let prefix = "";
       let middle = "";
-      let affix = "";
 
       if (comment) {
         prefix = `${comment[0] ? comment[0].join("") : ""}"${key}"`;
         middle = `${comment[1] ? comment[1].join("") : ""}:${
           comment[2] ? comment[2].join("") : " "
-        }${stringifyNode(value, indent + tabSize, commentsObj?.[`$${key}`])}`;
-        affix = `${comment[3] ? comment[3].join("") : ""}${
-          len - 1 === index ? "" : ","
-        }${comment[4] ? comment[4].join("") : ""}`;
-
-        const paths = affix.split(/\n/);
-        middle += paths.shift();
-        affix = paths.length ? "\n" + paths.join("\n") : "";
+        }${stringifyNode(value, indent + tabSize, commentsObj?.[`$${key}`])}${
+          comment[3] ? comment[3].join("").replace(/\n *$/,  '') : ""
+        }${len - 1 === index ? "" : ","}${
+          comment[4] ? comment[4].join("").replace(/\n *$/,  '') : ""
+        }`;
 
         // fix indent
         prefix = prefix
@@ -399,18 +395,6 @@ function stringifyNode(
                 firstword === "*" ? " *" : firstword
               }`
           );
-
-        middle = middle.replace(/\n$/, "");
-
-        affix = affix
-          .replace(
-            /(\n|^) *?([^\s])/g,
-            (_, lb, firstword) =>
-              `${lb}${whitespace(indent + tabSize)}${
-                firstword === "*" ? " *" : firstword
-              }`
-          )
-          .replace(/\n$/, "");
       } else {
         prefix = `${whitespace(indent + tabSize)}"${key}"`;
         middle = `: ${stringifyNode(
@@ -420,12 +404,12 @@ function stringifyNode(
         )}${len - 1 === index ? "" : ","}`;
       }
 
-      lines.push(prefix + middle + affix);
+      lines.push(prefix + middle);
     });
 
     if (Array.isArray(commentsObj?.$$)) {
       let comments = `${commentsObj.$$.join("")}`
-        .replace(/^\n|\n$/g, "")
+        .trim()
         .replace(
           /(\n|^) *?([^\s])/g,
           (_, lb, firstword) =>
