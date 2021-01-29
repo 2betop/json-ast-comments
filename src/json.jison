@@ -44,8 +44,8 @@ DIL [0]|({NZD}{DDS}*)
 decimalnumber (([-+]?{DIL}\.{DDS}*{DEP}?)|([-+]?\.{DDS}{DEP}?)|([-+]?{DIL}{DEP}?))
 escapechar [\'\"\\bfnrtv]
 escape \\{escapechar}
-acceptedcharssingle [^\'\\]+
-acceptedcharsdouble [^\"\\]+
+acceptedcharssingle [^\'\\\n]+
+acceptedcharsdouble [^\"\\\n]+
 stringsingle {escape}|{acceptedcharssingle}
 stringdouble {escape}|{acceptedcharsdouble}
 stringliteral (\'{stringsingle}*\')|(\"{stringdouble}*\")

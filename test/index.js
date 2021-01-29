@@ -50,7 +50,10 @@ const json = `{
 
   "yyy"/*2323*/: 333,
 
-  "zzz": 2
+  "zzz": 2,
+
+  "str": "abc",
+  "strWithEscape": "\\""
 
   // trailingComments
 }`;
